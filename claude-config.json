@@ -1,0 +1,9 @@
+{
+  "mcpServers": [
+    {
+      "name": "Simple MCP Server",
+      "command": "/Users/christophervidic/Desktop/whoop/run_simple_server.sh",
+      "workingDirectory": "/Users/christophervidic/Desktop/whoop"
+    }
+  ]
+} 

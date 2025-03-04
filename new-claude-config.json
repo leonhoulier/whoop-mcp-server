@@ -1,0 +1,10 @@
+{
+  "mcpServers": [
+    {
+      "name": "FileSystem",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/christophervidic/Desktop"],
+      "workingDirectory": "/Users/christophervidic/Desktop"
+    }
+  ]
+} 
