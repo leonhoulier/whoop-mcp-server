@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/christophervidic/Desktop"],
-      "cwd": "/Users/christophervidic/Desktop"
-    }
-  }
-} 

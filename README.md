@@ -1,74 +1,89 @@
 # Whoop MCP Server
+Python Package License: MIT Python 3.12
 
-A Model Context Protocol (MCP) server for integrating Whoop data with LLM applications.
-
-## Features
-
-- OAuth 2.0 authentication with Whoop API
-- Fetch latest cycle data
-- Calculate average strain over specified periods
-- MCP-compliant resources and tools
-
-## Setup
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Copy the example environment file:
-   ```bash
-   cp config/.env.example config/.env
-   ```
-4. Register your application in the [Whoop Developer Portal](https://developer.whoop.com)
-5. Update `config/.env` with your Whoop API credentials:
-   - `WHOOP_CLIENT_ID`
-   - `WHOOP_CLIENT_SECRET`
-   - `WHOOP_REDIRECT_URI`
-
-## Running the Server
-
-```bash
-python src/whoop_server.py
-```
-
-The server will start on `http://localhost:8000`.
-
-## MCP Integration
-
-Configure in your MCP client (e.g., Claude Desktop):
-
-```json
-{
-  "mcpServers": {
-    "whoop": {
-      "command": "python",
-      "args": ["src/whoop_server.py"]
-    }
-  }
-}
-```
-
-## Available Resources
-
-- `whoop://cycle/latest` - Get the latest cycle data
+A Model Context Protocol (MCP) server that provides access to the Whoop API. It allows language models to query cycles, recovery, strain, and workout data from the Whoop API.
 
 ## Available Tools
 
-- `get_average_strain(days: int)` - Calculate average strain over the last N days
-- `authenticate_whoop(code: str)` - Authenticate with Whoop using an authorization code
+The server exposes the following tools:
 
-## Authentication Flow
+### Cycle Queries
+- `get_cycle_collection(start_date: str, end_date: str)`: Get cycle data for a specific date range
+- `get_latest_cycle()`: Get the most recent cycle data
 
-1. Register your application in the Whoop Developer Portal
-2. Configure the redirect URI (default: `http://localhost:8000/callback`)
-3. Use the authentication endpoint to get an authorization code
-4. Call the `authenticate_whoop` tool with the received code
+### Recovery and Strain
+- `get_recovery_data(start_date: str, end_date: str)`: Get recovery data for a specific date range
+- `get_strain_data(start_date: str, end_date: str)`: Get strain data for a specific date range
+- `get_average_strain(days: int = 7)`: Calculate average strain over specified number of days
 
-## Contributing
+### Profile and Authentication
+- `get_profile()`: Get user profile information
+- `check_auth_status()`: Check authentication status with Whoop API
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Dates should be provided in ISO format (YYYY-MM-DD).
+
+## Usage
+
+You'll need Whoop credentials to use this server. The server uses email/password authentication with the Whoop API.
+
+### Claude for Desktop
+
+Update your `claude_desktop_config.json` (located in `~/Library/Application\ Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%/Claude/claude_desktop_config.json` on Windows) to include the following:
+
+```json
+{
+    "mcpServers": {
+        "Whoop": {
+            "command": "python",
+            "args": ["/path/to/whoop/src/whoop_server.py"],
+            "cwd": "/path/to/whoop",
+            "env": {
+                "WHOOP_EMAIL": "your.email@example.com",
+                "WHOOP_PASSWORD": "your_password"
+            }
+        }
+    }
+}
+```
+
+### HTTP API Server
+
+The project also includes an HTTP API server that exposes the same functionality over HTTP endpoints. To run it:
+
+```bash
+./run_whoop_server.sh
+```
+
+## Example Queries
+
+Once connected, you can ask Claude questions like:
+
+- "What's my recovery score for today?"
+- "Show me my strain data for the past week"
+- "What's my average strain over the last 7 days?"
+- "Get my latest cycle data"
+
+## Error Handling
+
+The server provides human-readable error messages for common issues:
+- Invalid date formats
+- API authentication errors
+- Network connectivity problems
+- Missing or invalid credentials
+
+## Project Structure
+
+```
+whoop/
+├── src/
+│   ├── whoop_server.py      # MCP server implementation
+│   └── whoop_http_server.py # HTTP API server implementation
+├── config/
+│   └── .env                 # Environment variables
+├── requirements.txt         # Python dependencies
+└── run_whoop_server.sh     # Script to run HTTP server
+```
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License - see the LICENSE file for details. 
