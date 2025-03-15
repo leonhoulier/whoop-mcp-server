@@ -62,7 +62,6 @@ def initialize_whoop_client() -> None:
 def get_latest_cycle() -> Dict[str, Any]:
     """
     Get the latest cycle data from Whoop.
-    Uses /v1/cycle endpoint with proper date filtering.
     
     Returns:
         Dictionary containing the latest cycle data including recovery score
@@ -71,47 +70,29 @@ def get_latest_cycle() -> Dict[str, Any]:
         return {"error": "Not authenticated with Whoop"}
     
     try:
-        # Look back 30 days by default to ensure we find the latest cycle
-        end = datetime.now().isoformat()
-        start = (datetime.now() - timedelta(days=30)).isoformat()
+        # Get today's date and yesterday's date
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         
-        # Get cycle collection with proper parameters
-        # API endpoint: GET /v1/cycle
-        # Parameters: start, end, limit=10 (default)
-        cycles = whoop_client.get_cycle_collection(
-            start=start,
-            end=end
-        )
+        # Get cycle collection for the last day - pass as positional arguments
+        cycles = whoop_client.get_cycle_collection(start_date, end_date)
         logger.debug(f"Received cycles response: {cycles}")
         
-        if not cycles or not cycles.get('records'):
-            # If no cycles found in last 30 days, try looking back 90 days
-            start = (datetime.now() - timedelta(days=90)).isoformat()
-            cycles = whoop_client.get_cycle_collection(
-                start=start,
-                end=end
-            )
-            if not cycles or not cycles.get('records'):
-                return {"error": "No cycle data available in the last 90 days"}
-        
-        # Get the first record (most recent as API sorts by start time descending)
-        latest_cycle = cycles['records'][0]
+        if not cycles:
+            return {"error": "No cycle data available"}
+            
+        latest_cycle = cycles[0]  # Most recent cycle
         
         # Extract recovery score if available
         recovery_score = None
-        if latest_cycle.get('score'):
-            recovery_score = latest_cycle['score'].get('recovery')
+        if latest_cycle.get('score') and latest_cycle['score'].get('recovery'):
+            recovery_score = latest_cycle['score']['recovery']
             
-        response = {
+        return {
             "cycle": latest_cycle,
             "recovery_score": recovery_score,
-            "timestamp": datetime.now().isoformat(),
-            "cycle_start": latest_cycle.get('start'),
-            "cycle_end": latest_cycle.get('end'),
-            "score_state": latest_cycle.get('score_state')
+            "timestamp": datetime.now().isoformat()
         }
-        
-        return response
     except Exception as e:
         logger.error(f"Error getting latest cycle: {str(e)}")
         return {"error": str(e)}
@@ -525,15 +506,12 @@ def get_latest_recovery() -> Dict[str, Any]:
     
     try:
         # Get today's recovery data
-        end = datetime.now().isoformat()
-        start = (datetime.now() - timedelta(days=1)).isoformat()
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
         
         # API endpoint: GET /v1/recovery
         # Parameters: start, end, limit=10 (default)
-        recoveries = whoop_client.get_recovery_collection(
-            start=start,
-            end=end
-        )
+        recoveries = whoop_client.get_recovery_collection(start_date, end_date)
         
         if not recoveries or not recoveries.get('records'):
             return {"error": "No recent recovery data available"}
