@@ -1,0 +1,310 @@
+# Whoop MCP Server
+
+A Model Context Protocol (MCP) server that provides access to the Whoop API v2. This server allows language models to query recovery, cycle, sleep, workout, and body measurement data from your Whoop account.
+
+## Features
+
+- **12 Comprehensive Tools**: Access recovery scores, HRV, sleep data, workouts, and body measurements
+- **OAuth 2.1 with PKCE**: Secure authentication using the latest OAuth standard
+- **Streamable HTTP**: Efficient data streaming for real-time applications
+- **Production Ready**: Includes deployment scripts for Nginx, PM2, and SSL certificates
+
+## Available Tools
+
+### Recovery Data
+- `get_recovery_data`: Get recovery data including recovery score, HRV, resting heart rate, SpO2, and skin temperature
+
+### Cycle Data
+- `get_cycles_data`: Get physiological cycle data including strain, calories, and heart rate metrics
+- `get_latest_cycle`: Get the most recent cycle data
+- `get_average_strain`: Calculate average strain over a specified number of days
+
+### Sleep Data
+- `get_sleep_data`: Get sleep data including sleep stages, performance %, quality score, respiratory rate, and efficiency
+- `get_sleep_for_cycle`: Get sleep data for a specific cycle by cycle ID
+- `get_latest_sleep`: Get the most recent sleep data
+
+### Workout Data
+- `get_workout_data`: Get workout data including sport, strain score, heart rate zones, calories, and GPS data
+- `get_workout_by_id`: Get specific workout by workout ID (UUID)
+- `get_recent_workouts`: Get recent workouts from the last 7 days
+
+### Body Measurements
+- `get_body_measurements`: Get user body measurements including height, weight, and max heart rate
+
+### Authentication
+- `check_auth_status`: Check authentication status and get user profile
+
+## Installation
+
+### Prerequisites
+
+- Python 3.12+
+- Whoop Developer Account and OAuth credentials
+- Nginx (for production deployment)
+- PM2 (for process management)
+
+### Local Setup
+
+1. Clone this repository:
+```bash
+git clone https://github.com/leonhoulier/whoop-mcp-server.git
+cd whoop-mcp-server
+```
+
+2. Create a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Configure environment variables:
+```bash
+cp config/.env.example config/.env
+nano config/.env
+```
+
+Add your Whoop OAuth credentials:
+```
+WHOOP_CLIENT_ID=your_client_id
+WHOOP_CLIENT_SECRET=your_client_secret
+WHOOP_REDIRECT_URI=https://your-domain.com/whoop/callback
+```
+
+5. Authenticate with Whoop:
+```bash
+./scripts/authenticate_whoop.sh
+```
+
+Follow the OAuth flow to authorize your application. The access token will be saved securely.
+
+## Deployment
+
+### Production Setup with Nginx and PM2
+
+This server is designed to run as a streamable HTTP MCP server behind Nginx.
+
+#### 1. Start the MCP Server
+
+The server runs on port 8003 by default:
+```bash
+./start_whoop_mcp_http.sh
+```
+
+Or manually:
+```bash
+cd /path/to/whoop-mcp-server
+source venv/bin/activate
+export MCP_HTTP_PORT=8003
+python src/whoop_mcp_http_server.py
+```
+
+#### 2. Configure PM2 (Recommended)
+
+Install PM2:
+```bash
+npm install -g pm2
+```
+
+Add the process to PM2:
+```bash
+pm2 start start_whoop_mcp_http.sh --name whoop-mcp-http
+pm2 save
+pm2 startup
+```
+
+#### 3. Configure Nginx
+
+Add to your Nginx configuration (`/etc/nginx/sites-available/mcp.example.com`):
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name mcp.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/mcp.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.example.com/privkey.pem;
+
+    # Whoop MCP Server - Streamable HTTP
+    location /whoop/mcp {
+        proxy_pass http://localhost:8003/mcp;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept "application/json, text/event-stream";
+        proxy_buffering off;
+    }
+
+    # Whoop OAuth Callback
+    location /whoop/callback {
+        proxy_pass http://localhost:8003/callback;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Whoop Re-authentication Endpoint
+    location /whoop/reauth {
+        proxy_pass http://localhost:8003/reauth;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Health Check
+    location /whoop/health {
+        proxy_pass http://localhost:8003/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Reload Nginx:
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 4. Documentation Server (Optional)
+
+The documentation server runs on port 8005:
+```bash
+./start_whoop_docs.sh
+```
+
+Add to PM2:
+```bash
+pm2 start start_whoop_docs.sh --name whoop-docs
+pm2 save
+```
+
+Add Nginx location:
+```nginx
+location = /whoop/ {
+    proxy_pass http://localhost:8005/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+}
+```
+
+## Usage with Cursor / Claude Desktop
+
+Add to your Cursor or Claude Desktop MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "whoop-mcp": {
+      "url": "https://your-domain.com/whoop/mcp"
+    }
+  }
+}
+```
+
+## Authentication
+
+Whoop MCP uses OAuth 2.1 with PKCE for secure authentication. Access tokens typically expire after ~24 hours. The server includes:
+
+- Automatic token refresh support (when Whoop provides refresh tokens)
+- Re-authentication endpoint at `/whoop/reauth`
+- Clear error messages with re-authentication URLs when tokens expire
+
+### Getting OAuth Credentials
+
+1. Create a Whoop Developer account at https://developer.whoop.com
+2. Register a new application
+3. Configure redirect URI: `https://your-domain.com/whoop/callback`
+4. Copy Client ID and Client Secret to your `.env` file
+
+## Environment Variables
+
+Required environment variables:
+
+- `WHOOP_CLIENT_ID`: Your Whoop OAuth Client ID
+- `WHOOP_CLIENT_SECRET`: Your Whoop OAuth Client Secret
+- `WHOOP_REDIRECT_URI`: Your OAuth callback URL
+- `MCP_HTTP_PORT`: Port for MCP HTTP server (default: 8003)
+- `WHOOP_DOCS_PORT`: Port for documentation server (default: 8005)
+
+## Project Structure
+
+```
+whoop-mcp-server/
+├── src/
+│   ├── whoop_mcp_server.py           # Core MCP server implementation
+│   ├── whoop_mcp_http_server.py      # Streamable HTTP server
+│   ├── whoop_mcp_sse_server.py       # Legacy SSE server
+│   └── ...
+├── config/
+│   ├── .env.example                  # Environment variables template
+│   └── tokens.json                   # Stored OAuth tokens (gitignored)
+├── scripts/
+│   ├── authenticate_whoop.sh         # OAuth authentication script
+│   └── authenticate_whoop.py         # OAuth helper Python script
+├── storage/                          # OAuth storage
+├── whoop_docs_server.py              # Documentation server
+├── start_whoop_mcp_http.sh           # MCP HTTP startup script
+├── start_whoop_docs.sh               # Docs server startup script
+├── requirements.txt                  # Python dependencies
+└── README.md                         # This file
+```
+
+## API Reference
+
+The server uses the Whoop API v2. See the [Whoop Developer Documentation](https://api.prod.whoop.com/developer/doc/openapi.json) for full API specifications.
+
+## Troubleshooting
+
+### Token Expiration
+
+If you receive authentication errors:
+1. Visit `https://your-domain.com/whoop/reauth`
+2. Re-authorize with Whoop
+3. The new token will be saved automatically
+
+### Server Not Starting
+
+Check PM2 logs:
+```bash
+pm2 logs whoop-mcp-http
+```
+
+Verify port is available:
+```bash
+lsof -i :8003
+```
+
+### 404 Errors
+
+Ensure Nginx configuration matches your actual port and endpoints. The server exposes:
+- `/mcp` - Main MCP endpoint
+- `/health` - Health check
+- `/reauth` - Re-authentication
+- `/callback` - OAuth callback
+
+## License
+
+MIT License - see LICENSE file for details.
+
+## Author
+
+Léon Houlier - https://leonhoulier.com
+
+## Acknowledgments
+
+Built with the [Model Context Protocol SDK](https://modelcontextprotocol.io) and the [Whoop API](https://developer.whoop.com).

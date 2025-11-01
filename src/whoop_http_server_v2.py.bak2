@@ -1,0 +1,1071 @@
+#!/usr/bin/env python3
+"""
+HTTP server for Whoop API integration using OAuth2.
+This server exposes HTTP endpoints to query the Whoop API for cycles, recovery, and strain data.
+"""
+
+import os
+import sys
+import json
+import secrets
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import logging
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+import uvicorn
+import requests
+from urllib.parse import urlencode
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stderr
+)
+logger = logging.getLogger(__name__)
+
+# Whoop API v2 configuration
+WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
+WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
+WHOOP_API_BASE = "https://api.prod.whoop.com/developer/v2"
+
+# OAuth credentials
+CLIENT_ID = None
+CLIENT_SECRET = None
+REDIRECT_URI = None
+
+# Token storage
+TOKEN_FILE = Path(__file__).parent.parent / 'config' / 'tokens.json'
+access_token = None
+refresh_token = None
+
+# State management for OAuth security
+oauth_state = None
+
+# Create FastAPI app
+app = FastAPI(
+    title="Whoop MCP Server",
+    description="HTTP server for Whoop API v2 integration with OAuth2",
+    version="2.0.0"
+)
+
+def load_config() -> None:
+    """Load configuration from environment variables."""
+    global CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
+    
+    env_path = Path(__file__).parent.parent / 'config' / '.env'
+    logger.info(f"Looking for .env file at: {env_path}")
+    
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+        logger.info("✅ Environment variables loaded")
+    
+    CLIENT_ID = os.getenv("WHOOP_CLIENT_ID")
+    CLIENT_SECRET = os.getenv("WHOOP_CLIENT_SECRET")
+    REDIRECT_URI = os.getenv("WHOOP_REDIRECT_URI")
+    
+    if not all([CLIENT_ID, CLIENT_SECRET, REDIRECT_URI]):
+        logger.error("❌ Missing OAuth credentials in environment variables")
+
+def load_tokens() -> None:
+    """Load access and refresh tokens from file."""
+    global access_token, refresh_token
+    
+    if TOKEN_FILE.exists():
+        try:
+            with open(TOKEN_FILE, 'r') as f:
+                tokens = json.load(f)
+                access_token = tokens.get('access_token')
+                refresh_token = tokens.get('refresh_token')
+                logger.info("✅ Tokens loaded from file")
+        except Exception as e:
+            logger.error(f"Error loading tokens: {e}")
+
+def save_tokens(access: str, refresh: str) -> None:
+    """Save access and refresh tokens to file."""
+    global access_token, refresh_token
+    
+    access_token = access
+    refresh_token = refresh
+    
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(TOKEN_FILE, 'w') as f:
+        json.dump({
+            'access_token': access,
+            'refresh_token': refresh,
+            'updated_at': datetime.now().isoformat()
+        }, f)
+    
+    # Secure the token file
+    os.chmod(TOKEN_FILE, 0o600)
+    logger.info("✅ Tokens saved securely (permissions: 600)")
+
+def refresh_access_token() -> bool:
+    """Refresh the access token using the refresh token."""
+    global access_token
+    
+    if not refresh_token:
+        logger.warning("No refresh token available")
+        return False
+    
+    try:
+        response = requests.post(WHOOP_TOKEN_URL, data={
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET
+        })
+        
+        if response.status_code == 200:
+            data = response.json()
+            save_tokens(data['access_token'], data.get('refresh_token', refresh_token))
+            logger.info("✅ Access token refreshed successfully")
+            return True
+        else:
+            logger.error(f"❌ Token refresh failed: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"Error refreshing token: {e}")
+        return False
+
+def make_whoop_request(endpoint: str, params: Dict = None) -> Any:
+    """Make an authenticated request to the Whoop API."""
+    if not access_token:
+        raise HTTPException(
+            status_code=401, 
+            detail="Not authenticated. Visit /auth/login to authenticate."
+        )
+    
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    url = f"{WHOOP_API_BASE}{endpoint}"
+    logger.info(f"Making request to: {url}")
+    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        
+        if response.status_code == 401:
+            logger.warning("Token expired, attempting refresh...")
+            if refresh_access_token():
+                headers['Authorization'] = f'Bearer {access_token}'
+                response = requests.get(url, headers=headers, params=params)
+            else:
+                raise HTTPException(
+                    status_code=401, 
+                    detail="Authentication expired. Visit /auth/login to re-authenticate."
+                )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"API request failed: {response.status_code} {response.text}")
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/", response_class=HTMLResponse)
+def root():
+    """Root endpoint with comprehensive documentation for AI agents."""
+    auth_status = "authenticated" if access_token else "not_authenticated"
+    
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Whoop MCP Server - API Documentation</title>
+        <style>
+            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+            body {{ 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: #f5f5f5;
+            }}
+            .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
+            header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; margin-bottom: 30px; border-radius: 8px; }}
+            h1 {{ font-size: 2.5em; margin-bottom: 10px; }}
+            .subtitle {{ font-size: 1.2em; opacity: 0.9; }}
+            .status-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .status-indicator {{ display: inline-block; padding: 5px 15px; border-radius: 20px; font-weight: bold; margin-left: 10px; }}
+            .status-authenticated {{ background: #d4edda; color: #155724; }}
+            .status-not-authenticated {{ background: #f8d7da; color: #721c24; }}
+            .section {{ background: white; padding: 30px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            h2 {{ color: #667eea; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #667eea; }}
+            h3 {{ color: #764ba2; margin: 20px 0 10px 0; }}
+            .endpoint {{ background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #667eea; }}
+            .endpoint-title {{ font-weight: bold; color: #667eea; margin-bottom: 5px; }}
+            .endpoint-url {{ font-family: 'Courier New', monospace; color: #e83e8c; margin: 5px 0; }}
+            .button {{ display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 10px 10px 10px 0; font-weight: 500; transition: background 0.3s; }}
+            .button:hover {{ background: #764ba2; }}
+            .button-secondary {{ background: #6c757d; }}
+            .button-secondary:hover {{ background: #5a6268; }}
+            code {{ background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; color: #e83e8c; }}
+            pre {{ background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; }}
+            pre code {{ background: none; color: #f8f8f2; }}
+            .param-table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+            .param-table th {{ background: #667eea; color: white; padding: 10px; text-align: left; }}
+            .param-table td {{ padding: 10px; border-bottom: 1px solid #ddd; }}
+            .param-table tr:hover {{ background: #f8f9fa; }}
+            .example {{ background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #0066cc; }}
+            .note {{ background: #fff3cd; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107; }}
+            .success {{ background: #d4edda; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #28a745; }}
+            footer {{ text-align: center; padding: 30px; color: #666; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>🏃‍♂️ Whoop MCP Server</h1>
+                <div class="subtitle">Model Context Protocol Server for Whoop Fitness Data</div>
+                <div class="subtitle" style="font-size: 0.9em; margin-top: 10px;">OAuth2-authenticated API for accessing recovery, strain, sleep, and workout metrics</div>
+            </header>
+
+            <div class="status-box">
+                <h2 style="border: none; margin: 0; padding: 0;">
+                    Authentication Status 
+                    <span class="status-indicator status-{auth_status}">
+                        {'✅ AUTHENTICATED' if access_token else '❌ NOT AUTHENTICATED'}
+                    </span>
+                </h2>
+                <div style="margin-top: 15px;">
+                    <a href="/auth/status" class="button button-secondary">Check Status</a>
+                    <a href="/auth/login" class="button">{'Re-authenticate' if access_token else 'Login to Whoop'}</a>
+                    <a href="/docs" class="button button-secondary">API Documentation</a>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>📚 Overview</h2>
+                <p>This MCP server provides programmatic access to Whoop fitness data through a RESTful HTTP API. It implements OAuth2 authorization code flow for secure authentication with the official Whoop API v2.</p>
+                
+                <div class="success" style="margin-top: 20px;">
+                    <strong>For AI Agents:</strong> This server exposes Whoop health metrics via HTTP endpoints. Use the endpoints below to retrieve recovery scores, strain data, sleep metrics, and workout information for the authenticated user (Leon Houlier).
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🔐 Authentication</h2>
+                <p>This server uses <strong>OAuth2 authorization code flow</strong> with the official Whoop API v2.</p>
+                
+                <h3>Authentication Flow</h3>
+                <ol>
+                    <li><strong>Initiate:</strong> Visit <code>/auth/login</code> to start OAuth2 flow</li>
+                    <li><strong>Authorize:</strong> User grants permissions on Whoop's authorization page</li>
+                    <li><strong>Callback:</strong> Server receives authorization code at <code>/callback</code></li>
+                    <li><strong>Exchange:</strong> Server exchanges code for access/refresh tokens</li>
+                    <li><strong>Access:</strong> Tokens are stored securely and used for all API requests</li>
+                </ol>
+
+                <div class="note">
+                    <strong>Security:</strong> Tokens are stored with 600 permissions (owner-only access) in <code>/config/tokens.json</code>. The server automatically refreshes expired tokens using the refresh token.
+                </div>
+
+                <h3>Required Scopes</h3>
+                <ul>
+                    <li><code>read:recovery</code> - Recovery data, HRV, resting heart rate</li>
+                    <li><code>read:cycles</code> - Day strain and cycle data</li>
+                    <li><code>read:workout</code> - Workout strain and activity data</li>
+                    <li><code>read:sleep</code> - Sleep performance and stage breakdown</li>
+                    <li><code>read:profile</code> - User profile information</li>
+                    <li><code>read:body_measurement</code> - Height, weight, max HR</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>📡 API Endpoints</h2>
+                
+                <div class="endpoint">
+                    <div class="endpoint-title">GET /recovery</div>
+                    <div class="endpoint-url">https://mcp.leonhoulier.com/whoop/recovery</div>
+                    <p><strong>Description:</strong> Retrieve recovery data including recovery score, HRV, resting heart rate, SpO2, and skin temperature.</p>
+                    
+                    <h4>Query Parameters:</h4>
+                    <table class="param-table">
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td><code>start</code></td>
+                            <td>ISO 8601 DateTime</td>
+                            <td>No</td>
+                            <td>Start date/time (default: 7 days ago)</td>
+                        </tr>
+                        <tr>
+                            <td><code>end</code></td>
+                            <td>ISO 8601 DateTime</td>
+                            <td>No</td>
+                            <td>End date/time (default: now)</td>
+                        </tr>
+                        <tr>
+                            <td><code>limit</code></td>
+                            <td>Integer</td>
+                            <td>No</td>
+                            <td>Max records (1-25, default: 10)</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="example">
+                        <strong>Example Request:</strong><br>
+                        <code>GET /recovery?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7</code>
+                        
+                        <pre><code># Response
+{{
+  "records": [
+    {{
+      "cycle_id": 1097114241,
+      "score": {{
+        "recovery_score": 92.0,
+        "resting_heart_rate": 48.0,
+        "hrv_rmssd_milli": 44.697197,
+        "spo2_percentage": 94.5,
+        "skin_temp_celsius": 31.989666
+      }}
+    }}
+  ]
+}}</code></pre>
+                    </div>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-title">GET /cycles</div>
+                    <div class="endpoint-url">https://mcp.leonhoulier.com/whoop/cycles</div>
+                    <p><strong>Description:</strong> Retrieve physiological cycle data including day strain, calories, and heart rate metrics.</p>
+                    
+                    <h4>Query Parameters:</h4>
+                    <table class="param-table">
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td><code>start</code></td>
+                            <td>ISO 8601 DateTime</td>
+                            <td>No</td>
+                            <td>Start date/time (default: 7 days ago)</td>
+                        </tr>
+                        <tr>
+                            <td><code>end</code></td>
+                            <td>ISO 8601 DateTime</td>
+                            <td>No</td>
+                            <td>End date/time (default: now)</td>
+                        </tr>
+                        <tr>
+                            <td><code>limit</code></td>
+                            <td>Integer</td>
+                            <td>No</td>
+                            <td>Max records (1-25, default: 10)</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="example">
+                        <strong>Example Request:</strong><br>
+                        <code>GET /cycles?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=5</code>
+                        
+                        <pre><code># Response
+{{
+  "records": [
+    {{
+      "id": 1097114241,
+      "created_at": "2025-10-08T01:38:51.353Z",
+      "start": "2025-10-07T20:51:46.570Z",
+      "score": {{
+        "strain": 6.717603,
+        "kilojoule": 7606.1777,
+        "average_heart_rate": 61,
+        "max_heart_rate": 143
+      }}
+    }}
+  ]
+}}</code></pre>
+                    </div>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-title">GET /cycles/latest</div>
+                    <div class="endpoint-url">https://mcp.leonhoulier.com/whoop/cycles/latest</div>
+                    <p><strong>Description:</strong> Get the most recent physiological cycle data.</p>
+                    <p><strong>Note:</strong> This endpoint does not accept parameters. Returns the latest cycle from the past 48 hours.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-title">GET /strain/average</div>
+                    <div class="endpoint-url">https://mcp.leonhoulier.com/whoop/strain/average</div>
+                    <p><strong>Description:</strong> Calculate average strain over a specified number of days.</p>
+                    
+                    <h4>Query Parameters:</h4>
+                    <table class="param-table">
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td><code>days</code></td>
+                            <td>Integer</td>
+                            <td>7</td>
+                            <td>Number of days to analyze (1-30)</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="example">
+                        <strong>Example Request:</strong><br>
+                        <code>GET /strain/average?days=7</code>
+                        
+                        <pre><code># Response
+{{
+  "average_strain": 6.05,
+  "days_analyzed": 7,
+  "samples": 8,
+  "date_range": {{
+    "start": "2025-10-01T00:00:00Z",
+    "end": "2025-10-08T23:59:59Z"
+  }}
+}}</code></pre>
+                    </div>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-title">GET /auth/status</div>
+                    <div class="endpoint-url">https://mcp.leonhoulier.com/whoop/auth/status</div>
+                    <p><strong>Description:</strong> Check authentication status and retrieve user profile if authenticated.</p>
+                    
+                    <div class="example">
+                        <strong>Example Response (Authenticated):</strong>
+                        <pre><code>{{
+  "authenticated": true,
+  "message": "Successfully authenticated with Whoop",
+  "user": {{
+    "user_id": 13969880,
+    "email": "leon@houlier.com",
+    "first_name": "Leon",
+    "last_name": "Houlier"
+  }}
+}}</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>💡 Usage Examples for AI Agents</h2>
+                
+                <h3>Example 1: Get Recovery Data for Last 7 Days</h3>
+                <pre><code>curl "https://mcp.leonhoulier.com/whoop/recovery?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7"</code></pre>
+                
+                <h3>Example 2: Compare Recovery Year-Over-Year</h3>
+                <pre><code># Get yesterday's recovery (Oct 7, 2025)
+curl "https://mcp.leonhoulier.com/whoop/recovery?start=2025-10-07T00:00:00Z&end=2025-10-07T23:59:59Z&limit=1"
+
+# Get same day last year (Oct 7, 2024)
+curl "https://mcp.leonhoulier.com/whoop/recovery?start=2024-10-07T00:00:00Z&end=2024-10-07T23:59:59Z&limit=1"</code></pre>
+
+                <h3>Example 3: Get All Cycles for a Month</h3>
+                <pre><code>curl "https://mcp.leonhoulier.com/whoop/cycles?start=2025-09-01T00:00:00Z&end=2025-09-30T23:59:59Z&limit=25"</code></pre>
+
+                <h3>Example 4: Calculate Average Strain</h3>
+                <pre><code>curl "https://mcp.leonhoulier.com/whoop/strain/average?days=30"</code></pre>
+            </div>
+
+            <div class="section">
+                <h2>📊 Data Schema</h2>
+                
+                <h3>Recovery Record</h3>
+                <pre><code>{{
+  "cycle_id": integer,
+  "sleep_id": "uuid-string",
+  "user_id": integer,
+  "created_at": "ISO8601-datetime",
+  "updated_at": "ISO8601-datetime",
+  "score_state": "SCORED" | "PENDING_SCORE" | "UNSCORABLE",
+  "score": {{
+    "user_calibrating": boolean,
+    "recovery_score": float (0-100),
+    "resting_heart_rate": integer (bpm),
+    "hrv_rmssd_milli": float (milliseconds),
+    "spo2_percentage": float (0-100),
+    "skin_temp_celsius": float
+  }}
+}}</code></pre>
+
+                <h3>Cycle Record</h3>
+                <pre><code>{{
+  "id": integer,
+  "user_id": integer,
+  "created_at": "ISO8601-datetime",
+  "start": "ISO8601-datetime",
+  "end": "ISO8601-datetime" | null,
+  "timezone_offset": string,
+  "score_state": "SCORED" | "PENDING_SCORE" | "UNSCORABLE",
+  "score": {{
+    "strain": float (0-21),
+    "kilojoule": float,
+    "average_heart_rate": integer (bpm),
+    "max_heart_rate": integer (bpm)
+  }}
+}}</code></pre>
+            </div>
+
+            <div class="section">
+                <h2>🎯 AI Agent Instructions</h2>
+                
+                <h3>Quick Start</h3>
+                <ol>
+                    <li><strong>Check Authentication:</strong> Call <code>GET /auth/status</code></li>
+                    <li><strong>If not authenticated:</strong> Inform user to visit <code>/auth/login</code></li>
+                    <li><strong>Query Data:</strong> Use appropriate endpoint with date parameters</li>
+                    <li><strong>Parse Response:</strong> Extract relevant metrics from JSON response</li>
+                </ol>
+
+                <h3>Date Format Requirements</h3>
+                <div class="note">
+                    <strong>Important:</strong> All dates must be in <strong>ISO 8601 format</strong> with timezone:
+                    <ul>
+                        <li>✅ Correct: <code>2025-10-07T00:00:00Z</code></li>
+                        <li>✅ Correct: <code>2025-10-07T14:30:00-05:00</code></li>
+                        <li>❌ Wrong: <code>2025-10-07</code></li>
+                        <li>❌ Wrong: <code>10/07/2025</code></li>
+                    </ul>
+                </div>
+
+                <h3>Common Use Cases</h3>
+                <ul>
+                    <li>📈 <strong>Track recovery trends:</strong> Query recovery data for date range and analyze scores</li>
+                    <li>💪 <strong>Monitor strain:</strong> Get cycle data to track daily strain levels</li>
+                    <li>📊 <strong>Compare periods:</strong> Query same date ranges in different years</li>
+                    <li>🎯 <strong>Identify patterns:</strong> Correlate recovery with strain, sleep, or external factors</li>
+                    <li>⚡ <strong>Calculate averages:</strong> Use <code>/strain/average</code> for quick insights</li>
+                </ul>
+
+                <h3>Sample AI Agent Queries</h3>
+                <div class="example">
+                    <strong>Q: "What was my recovery score yesterday?"</strong><br>
+                    <em>→ Call <code>/recovery?start=2025-10-07T00:00:00Z&end=2025-10-07T23:59:59Z&limit=1</code></em><br>
+                    <em>→ Extract <code>records[0].score.recovery_score</code></em>
+                </div>
+
+                <div class="example">
+                    <strong>Q: "Show my average strain for the last month"</strong><br>
+                    <em>→ Call <code>/strain/average?days=30</code></em><br>
+                    <em>→ Return <code>average_strain</code> value</em>
+                </div>
+
+                <div class="example">
+                    <strong>Q: "How does my recovery today compare to last week?"</strong><br>
+                    <em>→ Call <code>/recovery</code> for today and 7 days ago</em><br>
+                    <em>→ Compare recovery_score values</em>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🔧 Technical Details</h2>
+                
+                <h3>Base URL</h3>
+                <code>https://mcp.leonhoulier.com/whoop/</code>
+                
+                <h3>Upstream API</h3>
+                <p>Whoop API v2: <code>https://api.prod.whoop.com/developer/v2</code></p>
+                <p>Official Documentation: <a href="https://developer.whoop.com/api" target="_blank">developer.whoop.com/api</a></p>
+                
+                <h3>Rate Limits</h3>
+                <p>Subject to Whoop API rate limits. The server handles 429 responses gracefully.</p>
+                
+                <h3>Response Format</h3>
+                <p>All endpoints return JSON. Successful requests return data objects; errors return <code>{{"detail": "error message"}}</code>.</p>
+                
+                <h3>Server Information</h3>
+                <ul>
+                    <li><strong>Version:</strong> 2.0.0 (OAuth2)</li>
+                    <li><strong>Framework:</strong> FastAPI + Uvicorn</li>
+                    <li><strong>Transport:</strong> HTTPS</li>
+                    <li><strong>Process Manager:</strong> PM2 (auto-restart enabled)</li>
+                    <li><strong>Security:</strong> OAuth2 + Token-based authentication</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>⚠️ Error Handling</h2>
+                
+                <h3>Common Error Responses</h3>
+                <table class="param-table">
+                    <tr>
+                        <th>Status Code</th>
+                        <th>Error</th>
+                        <th>Solution</th>
+                    </tr>
+                    <tr>
+                        <td>401</td>
+                        <td>Not authenticated</td>
+                        <td>Visit /auth/login to authenticate</td>
+                    </tr>
+                    <tr>
+                        <td>404</td>
+                        <td>Endpoint not found or no data</td>
+                        <td>Check URL path and date parameters</td>
+                    </tr>
+                    <tr>
+                        <td>429</td>
+                        <td>Rate limit exceeded</td>
+                        <td>Wait before retrying</td>
+                    </tr>
+                    <tr>
+                        <td>500</td>
+                        <td>Server error</td>
+                        <td>Check logs or contact administrator</td>
+                    </tr>
+                </table>
+
+                <div class="note">
+                    <strong>For AI Agents:</strong> If you receive a 401 error, inform the user that authentication is required. Direct them to visit <code>https://mcp.leonhoulier.com/whoop/auth/login</code> to authenticate.
+                </div>
+            </div>
+
+            <div class="section">
+            <div class="section">
+                <h2>🤖 Recommended System Prompt for AI Agents</h2>
+                
+                <p>Use this system prompt template to configure AI agents for optimal interaction with the Whoop MCP Server:</p>
+                
+                <div class="example" style="background: #f8f9fa; border-left: 4px solid #667eea;">
+                    <h3 style="margin-top: 0;">📋 System Prompt Template</h3>
+                    <pre style="white-space: pre-wrap; background: #2d2d2d; color: #f8f8f2; padding: 20px; border-radius: 5px; line-height: 1.8;"><code>You have access to Leon Houlier's Whoop fitness data through the Whoop MCP Server API.
+
+<strong>BASE URL:</strong> https://mcp.leonhoulier.com/whoop/
+
+<strong>AUTHENTICATION STATUS:</strong> Check at /auth/status
+
+<strong>AVAILABLE ENDPOINTS:</strong>
+
+1. <strong>GET /recovery</strong> - Recovery metrics (score, HRV, resting HR, SpO2, skin temp)
+   Parameters: start (ISO8601), end (ISO8601), limit (1-25)
+   Example: /recovery?start=2025-10-01T00:00:00Z&amp;end=2025-10-08T23:59:59Z&amp;limit=7
+
+2. <strong>GET /cycles</strong> - Physiological cycles (strain, calories, heart rate)
+   Parameters: start (ISO8601), end (ISO8601), limit (1-25)
+   Example: /cycles?start=2025-10-01T00:00:00Z&amp;end=2025-10-08T23:59:59Z&amp;limit=7
+
+3. <strong>GET /cycles/latest</strong> - Most recent cycle (no parameters)
+
+4. <strong>GET /strain/average</strong> - Average strain calculation
+   Parameters: days (1-30, default: 7)
+   Example: /strain/average?days=14
+
+5. <strong>GET /auth/status</strong> - Check authentication and get user profile
+
+<strong>DATE FORMAT REQUIREMENTS:</strong>
+- ALWAYS use ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
+- ✅ Correct: 2025-10-07T00:00:00Z
+- ❌ Wrong: 2025-10-07 or 10/07/2025
+
+<strong>RESPONSE HANDLING:</strong>
+- All responses are JSON format
+- Recovery data: Extract from records[].score.recovery_score
+- Strain data: Extract from records[].score.strain
+- Handle 401 errors: User needs to authenticate at /auth/login
+- Handle 404 errors: No data available for specified date range
+
+<strong>COMMON QUERIES:</strong>
+
+1. "What's my recovery score today?"
+   → GET /recovery?start={{today}}T00:00:00Z&amp;end={{today}}T23:59:59Z&amp;limit=1
+
+2. "What's my average strain this week?"
+   → GET /strain/average?days=7
+
+3. "Compare my recovery last month vs this month"
+   → GET /recovery for both date ranges, compare averages
+
+4. "Show my workout strain yesterday"
+   → GET /cycles?start={{yesterday}}T00:00:00Z&amp;end={{yesterday}}T23:59:59Z&amp;limit=1
+
+<strong>DATA INTERPRETATION:</strong>
+- Recovery Score: 0-100% (67%+ = Green, 34-66% = Yellow, 0-33% = Red)
+- Strain: 0-21 scale (0-9.9 = Light, 10-13.9 = Moderate, 14-17.9 = Strenuous, 18-21 = All Out)
+- HRV (RMSSD): Higher is generally better (varies by individual)
+- Resting HR: Lower is generally better for fitness
+
+<strong>BEST PRACTICES:</strong>
+1. Always check authentication status first if getting 401 errors
+2. Use specific date ranges rather than relying on defaults
+3. Format dates correctly in ISO 8601 with timezone
+4. Limit results appropriately (max 25 per request)
+5. Parse JSON responses carefully, check for empty records[]
+6. Provide context with data (dates, comparisons, trends)
+
+<strong>ERROR HANDLING:</strong>
+- 401: Direct user to https://mcp.leonhoulier.com/whoop/auth/login
+- 404: No data available for date range - try different dates
+- 429: Rate limit exceeded - wait before retrying
+- 500: Server error - check logs or try again later
+
+When answering queries:
+1. Construct proper API URLs with correct date formats
+2. Fetch data from the appropriate endpoint
+3. Parse JSON and extract relevant metrics
+4. Present data clearly with context and interpretation
+5. Suggest related insights or comparisons when relevant</code></pre>
+                </div>
+
+                <div class="success" style="margin-top: 20px;">
+                    <strong>💡 Pro Tip:</strong> AI agents should always verify authentication status first, use precise ISO 8601 date formats, and provide contextual interpretation of metrics (e.g., "Your recovery score of 73% is in the green zone, indicating good readiness").
+                </div>
+
+                <h3>Quick Copy-Paste Version</h3>
+                <div class="note">
+                    <strong>Minimal System Prompt:</strong>
+                    <pre style="background: #fff; color: #333; padding: 15px; border: 1px solid #ddd;"><code>You have access to Whoop fitness data at https://mcp.leonhoulier.com/whoop/
+
+Endpoints: /recovery, /cycles, /strain/average, /auth/status
+Date format: ISO 8601 (YYYY-MM-DDTHH:MM:SSZ)
+Max limit: 25 records per request
+Auth required: Check /auth/status first
+
+Recovery: 0-100% (67%+ green, 34-66% yellow, 0-33% red)
+Strain: 0-21 (0-9.9 light, 10-13.9 moderate, 14-17.9 strenuous, 18-21 all out)</code></pre>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>🎨 Quick Links</h2>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px;">
+                    <a href="/auth/status" class="button button-secondary" target="_blank">🔐 Check Auth Status →</a>
+                    <a href="/recovery?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7" class="button button-secondary" target="_blank">📊 Last 7 Days Recovery →</a>
+                    <a href="/cycles?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7" class="button button-secondary" target="_blank">💪 Last 7 Days Cycles →</a>
+                    <a href="/strain/average?days=7" class="button button-secondary" target="_blank">📈 Average Strain (7d) →</a>
+                    <a href="/docs" class="button" target="_blank">📚 OpenAPI Docs →</a>
+                </div>
+            </div>
+
+            <footer>
+                <p><strong>Whoop MCP Server v2.0.0</strong></p>
+                <p>Powered by Whoop API v2 | OAuth2 Authentication</p>
+                <p>Leon Houlier © 2025 | <a href="https://mcp.leonhoulier.com">mcp.leonhoulier.com</a></p>
+            </footer>
+        </div>
+    </body>
+    </html>
+    """)
+
+@app.get("/auth/login")
+def auth_login():
+    """Initiate OAuth2 login flow with proper state parameter."""
+    global oauth_state
+    
+    if not all([CLIENT_ID, REDIRECT_URI]):
+        raise HTTPException(status_code=500, detail="OAuth configuration missing")
+    
+    # Generate secure random state (32 bytes)
+    oauth_state = secrets.token_urlsafe(32)
+    
+    params = {
+        'client_id': CLIENT_ID,
+        'redirect_uri': REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement',
+        'state': oauth_state
+    }
+    
+    auth_url = f"{WHOOP_AUTH_URL}?{urlencode(params)}"
+    logger.info(f"🔐 Initiating OAuth with state: {oauth_state[:10]}...")
+    
+    return RedirectResponse(url=auth_url)
+
+@app.get("/callback")
+async def auth_callback(code: str = None, state: str = None, error: str = None, error_description: str = None):
+    """Handle OAuth2 callback from Whoop."""
+    global oauth_state
+    
+    if error:
+        logger.error(f"OAuth error: {error} - {error_description}")
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Authentication Error</title>
+            <style>
+                body {{ font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+                h1 {{ color: #dc3545; }}
+                a {{ color: #007bff; text-decoration: none; }}
+            </style>
+        </head>
+        <body>
+            <h1>❌ Authentication Error</h1>
+            <p><strong>Error:</strong> {error}</p>
+            <p><strong>Description:</strong> {error_description}</p>
+            <p><a href="/auth/login">← Try again</a></p>
+        </body>
+        </html>
+        """, status_code=400)
+    
+    if not code:
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>No Authorization Code</title>
+            <style>
+                body {{ font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+            </style>
+        </head>
+        <body>
+            <h1>❌ No Authorization Code</h1>
+            <p>The authorization code was not provided by Whoop.</p>
+            <p><a href="/auth/login">← Try authenticating again</a></p>
+        </body>
+        </html>
+        """, status_code=400)
+    
+    # Verify state parameter
+    if state != oauth_state:
+        logger.error(f"State mismatch: expected {oauth_state}, got {state}")
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Security Error</title>
+            <style>
+                body {{ font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+            </style>
+        </head>
+        <body>
+            <h1>❌ Security Error</h1>
+            <p>Invalid state parameter. This could be a CSRF attack.</p>
+            <p><a href="/auth/login">← Try authenticating again</a></p>
+        </body>
+        </html>
+        """, status_code=400)
+    
+    try:
+        logger.info(f"Exchanging authorization code for tokens...")
+        response = requests.post(WHOOP_TOKEN_URL, data={
+            'grant_type': 'authorization_code',
+            'code': code,
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET,
+            'redirect_uri': REDIRECT_URI
+        })
+        
+        logger.info(f"Token response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            save_tokens(data['access_token'], data.get('refresh_token', ''))
+            logger.info("✅ Successfully authenticated with Whoop!")
+            
+            oauth_state = None
+            
+            return HTMLResponse(content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Authentication Successful</title>
+                <style>
+                    body {{ font-family: sans-serif; max-width: 700px; margin: 50px auto; padding: 20px; background: #f5f5f5; }}
+                    .success-box {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                    h1 {{ color: #28a745; }}
+                    .button {{ display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 5px; }}
+                    a {{ color: #007bff; }}
+                </style>
+            </head>
+            <body>
+                <div class="success-box">
+                    <h1>✅ Successfully Authenticated!</h1>
+                    <p>Your Whoop account is now connected to the MCP server.</p>
+                    <h3>Test Your Connection:</h3>
+                    <a href="/recovery?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7" class="button">View Recovery Data</a>
+                    <a href="/cycles?start=2025-10-01T00:00:00Z&end=2025-10-08T23:59:59Z&limit=7" class="button">View Cycles</a>
+                    <a href="/auth/status" class="button">Check Status</a>
+                    <p style="margin-top: 20px;"><a href="/">← Back to Documentation</a></p>
+                </div>
+            </body>
+            </html>
+            """)
+        else:
+            logger.error(f"Token exchange failed: {response.status_code} {response.text}")
+            return HTMLResponse(content=f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Token Exchange Failed</title></head>
+            <body style="font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+                <h1>❌ Token Exchange Failed</h1>
+                <p><strong>Status:</strong> {response.status_code}</p>
+                <p><strong>Error:</strong> {response.text}</p>
+                <p><a href="/auth/login">← Try again</a></p>
+            </body>
+            </html>
+            """, status_code=400)
+    except Exception as e:
+        logger.error(f"Callback error: {e}", exc_info=True)
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Error</title></head>
+        <body style="font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+            <h1>❌ Authentication Error</h1>
+            <p>{str(e)}</p>
+            <p><a href="/auth/login">← Try again</a></p>
+        </body>
+        </html>
+        """, status_code=500)
+
+@app.get("/auth/status")
+def check_auth_status() -> Dict[str, Any]:
+    """Check if we're authenticated with Whoop."""
+    if not access_token:
+        return {
+            "authenticated": False,
+            "message": "Not authenticated with Whoop",
+            "instructions": "Visit /auth/login to authenticate"
+        }
+    
+    try:
+        profile = make_whoop_request("/user/profile/basic")
+        return {
+            "authenticated": True,
+            "message": "Successfully authenticated with Whoop",
+            "user": profile
+        }
+    except HTTPException as e:
+        return {
+            "authenticated": False,
+            "message": f"Authentication error: {e.detail}",
+            "instructions": "Visit /auth/login to re-authenticate"
+        }
+
+@app.get("/cycles/latest")
+def get_latest_cycle() -> Dict[str, Any]:
+    """Get the latest cycle data from Whoop."""
+    try:
+        end = datetime.now().isoformat()
+        start = (datetime.now() - timedelta(days=2)).isoformat()
+        
+        response = make_whoop_request("/cycle", params={
+            'start': start,
+            'end': end,
+            'limit': 1
+        })
+        
+        if response and response.get('records'):
+            return response['records'][0]
+        else:
+            raise HTTPException(status_code=404, detail="No cycle data available")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting latest cycle: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/strain/average")
+def get_average_strain(days: int = 7) -> Dict[str, Any]:
+    """Calculate average strain over the specified number of days."""
+    try:
+        end = datetime.now().isoformat()
+        start = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        response = make_whoop_request("/cycle", params={
+            'start': start,
+            'end': end,
+            'limit': 25
+        })
+        
+        if not response or not response.get('records'):
+            raise HTTPException(status_code=404, detail="No cycle data available")
+        
+        strains = []
+        for cycle in response['records']:
+            if cycle.get('score') and cycle['score'].get('strain'):
+                strains.append(cycle['score']['strain'])
+        
+        if not strains:
+            raise HTTPException(status_code=404, detail="No strain data available")
+        
+        return {
+            "average_strain": round(sum(strains) / len(strains), 2),
+            "days_analyzed": days,
+            "samples": len(strains),
+            "date_range": {
+                "start": start,
+                "end": end
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/cycles")
+def get_cycles(start: str = None, end: str = None, limit: int = 10) -> Dict[str, Any]:
+    """Get cycles from Whoop API."""
+    try:
+        if not end:
+            end = datetime.now().isoformat()
+        if not start:
+            start = (datetime.now() - timedelta(days=7)).isoformat()
+        
+        response = make_whoop_request("/cycle", params={
+            'start': start,
+            'end': end,
+            'limit': min(limit, 25)
+        })
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting cycles: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/recovery")
+def get_recovery(start: str = None, end: str = None, limit: int = 10) -> Dict[str, Any]:
+    """Get recovery data from Whoop API."""
+    try:
+        if not end:
+            end = datetime.now().isoformat()
+        if not start:
+            start = (datetime.now() - timedelta(days=7)).isoformat()
+        
+        response = make_whoop_request("/recovery", params={
+            'start': start,
+            'end': end,
+            'limit': min(limit, 25)
+        })
+        
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting recovery: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def main() -> None:
+    """Main entry point for the server."""
+    try:
+        logger.info("🚀 Starting Whoop HTTP Server v2 with OAuth2...")
+        load_config()
+        load_tokens()
+        
+        if access_token:
+            logger.info("✅ Found existing access token")
+        else:
+            logger.info("⚠️  No access token found. Visit /auth/login to authenticate.")
+        
+        uvicorn.run(app, host="0.0.0.0", port=8000)
+    except Exception as e:
+        logger.error(f"Server error: {str(e)}", exc_info=True)
+        raise
+
+if __name__ == "__main__":
+    main()
