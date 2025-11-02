@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "whoop-mcp": {
+      "command": "python",
+      "args": ["/home/ubuntu/whoop-mcp-server/src/whoop_mcp_server.py"],
+      "env": {
+        "WHOOP_CLIENT_ID": "c2c5237d-0e29-48a3-991c-6cf7cf1dbfab",
+        "WHOOP_CLIENT_SECRET": "9b07f58b9eee8a8bb3c6019ef40027d6bdb81b4f6efeb49690a5ede004e0342d",
+        "WHOOP_REDIRECT_URI": "https://mcp.leonhoulier.com/whoop/callback"
+      }
+    }
+  },
+  "oauth": {
+    "whoop": {
+      "clientId": "c2c5237d-0e29-48a3-991c-6cf7cf1dbfab",
+      "clientSecret": "9b07f58b9eee8a8bb3c6019ef40027d6bdb81b4f6efeb49690a5ede004e0342d",
+      "authorizationUrl": "https://api.prod.whoop.com/oauth/oauth2/auth",
+      "tokenUrl": "https://api.prod.whoop.com/oauth/oauth2/token",
+      "redirectUri": "https://mcp.leonhoulier.com/whoop/callback",
+      "scope": "read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement"
+    }
+  }
+}

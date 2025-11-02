@@ -1,0 +1,102 @@
+{
+  "toVGjdsLwXAm4MB-7hELN10of43TRM-J7IZtpuYbsqo": {
+    "code": "toVGjdsLwXAm4MB-7hELN10of43TRM-J7IZtpuYbsqo",
+    "scopes": [],
+    "expires_at": 1760019125.461961,
+    "client_id": "q8Ay2ym2sP9710roor4XlvSuwPP_OwSSwLKt1LRuEcg",
+    "code_challenge": "test_challenge",
+    "redirect_uri": "https://localhost/callback",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "cF57VTniztjzPDglT1Ys-Oi8e35hr3yVFAKoVoV_kzM": {
+    "code": "cF57VTniztjzPDglT1Ys-Oi8e35hr3yVFAKoVoV_kzM",
+    "scopes": [],
+    "expires_at": 1760019133.4798799,
+    "client_id": "q8Ay2ym2sP9710roor4XlvSuwPP_OwSSwLKt1LRuEcg",
+    "code_challenge": "test_challenge",
+    "redirect_uri": "https://localhost/callback",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "sFB1qiWZnynBP-QoxfoXCssZgB-9MlRvodeYN0guAdU": {
+    "code": "sFB1qiWZnynBP-QoxfoXCssZgB-9MlRvodeYN0guAdU",
+    "scopes": [],
+    "expires_at": 1760020030.3050053,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "code_challenge": "NVi_VWYm2hBPqtb6xfU3XYip5ocehiSpXqsWbL3QXQk",
+    "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "ewUuF9W2qFSrjEHIYlzkBLEnK45Nj5Hahen1Iu6t5DY": {
+    "code": "ewUuF9W2qFSrjEHIYlzkBLEnK45Nj5Hahen1Iu6t5DY",
+    "scopes": [],
+    "expires_at": 1760020278.082721,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "code_challenge": "oGbANof_t8N7vybaXCEdHyx2w86dA3djRG2WTCs59d4",
+    "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "QxsHDRucHt6hCrdvLg3FiNDga1hrsC-P9KICmcp63VE": {
+    "code": "QxsHDRucHt6hCrdvLg3FiNDga1hrsC-P9KICmcp63VE",
+    "scopes": [],
+    "expires_at": 1760020480.8886967,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "code_challenge": "test",
+    "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "Ce3dA_QT59mbfxM-E_QlKsK5Sl3QMjieLbPuXb8_Cfo": {
+    "code": "Ce3dA_QT59mbfxM-E_QlKsK5Sl3QMjieLbPuXb8_Cfo",
+    "scopes": [],
+    "expires_at": 1760020591.6643038,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "code_challenge": "test",
+    "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "byBVryetR1xjIKlG2Efp0yDD3slioXl5xT7KJYpyqCY": {
+    "code": "byBVryetR1xjIKlG2Efp0yDD3slioXl5xT7KJYpyqCY",
+    "scopes": [],
+    "expires_at": 1760020962.1025422,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "code_challenge": "aqkiLuMfL4ExQuOl1WarJFg3aOzJ798ZheXKiBMtW9w",
+    "redirect_uri": "https://chatgpt.com/connector_platform_oauth_redirect",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "QiKqRizq4Y_jsmsAw1WlvkMaqm7WOvqVnjLACI3ExqY": {
+    "code": "QiKqRizq4Y_jsmsAw1WlvkMaqm7WOvqVnjLACI3ExqY",
+    "scopes": [],
+    "expires_at": 1761942595.7555168,
+    "client_id": "fclVsxdJZD2IXOCzbmzCuOq-r9Ig-zXkQu-HKV9ocHA",
+    "code_challenge": "-b67QiZ0J-giwyf9rBpOMkyQiJfOh5dVy01hygcfKow",
+    "redirect_uri": "https://poke.com/api/v1/mcp/callback",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "OdIOlsicYaTtIUQd6zB_YFSdTpoNdAuDaRocbYe0aK4": {
+    "code": "OdIOlsicYaTtIUQd6zB_YFSdTpoNdAuDaRocbYe0aK4",
+    "scopes": [],
+    "expires_at": 1761942679.8482375,
+    "client_id": "5NxcVp3CGpJ0XbfiM7-NHaa2hKfgrqomkmxPtn2ZqNw",
+    "code_challenge": "pwzVTg6bauPK6T_CtmktuG8Trnw1IZVo1wY8EoOonTU",
+    "redirect_uri": "https://poke.com/api/v1/mcp/callback",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  },
+  "RykPTjzCmapycJSzpx8Jum0RpCRdHeSAhTvwT78e-ms": {
+    "code": "RykPTjzCmapycJSzpx8Jum0RpCRdHeSAhTvwT78e-ms",
+    "scopes": [],
+    "expires_at": 1761942853.6541681,
+    "client_id": "_CpBy9FGcvxE-HWd96v0uhu4ngLJYS_vvpY7l4QcLyA",
+    "code_challenge": "eJRvubfWuaXuVs3_AJY85YIWV3B_GrErSjGqz0YzCQ8",
+    "redirect_uri": "https://poke.com/api/v1/mcp/callback",
+    "redirect_uri_provided_explicitly": true,
+    "resource": null
+  }
+}

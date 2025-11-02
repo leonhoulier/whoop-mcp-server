@@ -1,0 +1,170 @@
+{
+  "q8Ay2ym2sP9710roor4XlvSuwPP_OwSSwLKt1LRuEcg": {
+    "redirect_uris": [
+      "https://localhost/callback"
+    ],
+    "token_endpoint_auth_method": "client_secret_post",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": "read:recovery read:workout",
+    "client_name": "Test Client",
+    "client_uri": null,
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "q8Ay2ym2sP9710roor4XlvSuwPP_OwSSwLKt1LRuEcg",
+    "client_secret": "7B_APinRO5tW-rT20luYOboweEym-n4vb7dwdrOcz2o",
+    "client_id_issued_at": 1760018248,
+    "client_secret_expires_at": null
+  },
+  "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY": {
+    "redirect_uris": [
+      "https://chatgpt.com/connector_platform_oauth_redirect"
+    ],
+    "token_endpoint_auth_method": "client_secret_post",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": null,
+    "client_name": "ChatGPT",
+    "client_uri": null,
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "jrBflLE00IpDRputnTeVGOuv00DYmzN0xCpibAR6GBY",
+    "client_secret": "JltIT6aaNeByu8m3UQkw1R6XtWetnHySO1-wEmdiWkE",
+    "client_id_issued_at": 1760019420,
+    "client_secret_expires_at": null
+  },
+  "xeUeHVq3jKHDwNfBsbwD0I0epPqTRUcsaB-bEs4kfCg": {
+    "redirect_uris": [
+      "cursor://anysphere.cursor-mcp/oauth/user-whoop-mcp/callback"
+    ],
+    "token_endpoint_auth_method": "none",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": null,
+    "client_name": "Cursor",
+    "client_uri": null,
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "xeUeHVq3jKHDwNfBsbwD0I0epPqTRUcsaB-bEs4kfCg",
+    "client_secret": "tPLI064plqWLjf1I2MMEGw-VEYJiEuHxbwlJ6OKtT-8",
+    "client_id_issued_at": 1761940217,
+    "client_secret_expires_at": null
+  },
+  "fclVsxdJZD2IXOCzbmzCuOq-r9Ig-zXkQu-HKV9ocHA": {
+    "redirect_uris": [
+      "https://poke.com/api/v1/mcp/callback"
+    ],
+    "token_endpoint_auth_method": "none",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": null,
+    "client_name": "Poke",
+    "client_uri": "https://poke.com/",
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "fclVsxdJZD2IXOCzbmzCuOq-r9Ig-zXkQu-HKV9ocHA",
+    "client_secret": "S6rcJftIQNWHlDEXD__1U0Mvj9-woIm-r0k3VeIYUAU",
+    "client_id_issued_at": 1761941992,
+    "client_secret_expires_at": null
+  },
+  "5NxcVp3CGpJ0XbfiM7-NHaa2hKfgrqomkmxPtn2ZqNw": {
+    "redirect_uris": [
+      "https://poke.com/api/v1/mcp/callback"
+    ],
+    "token_endpoint_auth_method": "none",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": null,
+    "client_name": "Poke",
+    "client_uri": "https://poke.com/",
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "5NxcVp3CGpJ0XbfiM7-NHaa2hKfgrqomkmxPtn2ZqNw",
+    "client_secret": "cGOCffe2SbX6Z94kig7vU76_4iwlRie00ogTmO4Fc98",
+    "client_id_issued_at": 1761942079,
+    "client_secret_expires_at": null
+  },
+  "_CpBy9FGcvxE-HWd96v0uhu4ngLJYS_vvpY7l4QcLyA": {
+    "redirect_uris": [
+      "https://poke.com/api/v1/mcp/callback"
+    ],
+    "token_endpoint_auth_method": "none",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": null,
+    "client_name": "Poke",
+    "client_uri": "https://poke.com/",
+    "logo_uri": null,
+    "contacts": null,
+    "tos_uri": null,
+    "policy_uri": null,
+    "jwks_uri": null,
+    "jwks": null,
+    "software_id": null,
+    "software_version": null,
+    "client_id": "_CpBy9FGcvxE-HWd96v0uhu4ngLJYS_vvpY7l4QcLyA",
+    "client_secret": "wnl1ADNvHxjMcs-BfczoGg-6_2o5C3XZZl4iUYY3UEU",
+    "client_id_issued_at": 1761942252,
+    "client_secret_expires_at": null
+  }
+}
