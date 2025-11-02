@@ -79,26 +79,11 @@ def load_tokens() -> None:
                 tokens = json.load(f)
                 access_token = tokens.get("access_token")
                 refresh_token = tokens.get("refresh_token")
-                expires_at = tokens.get("expires_at")
-                
-                # Check if token is expired
-                if expires_at:
-                    try:
-                        exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                        if datetime.now(timezone.utc) >= exp_time:
-                            logger.warning("⚠️  Access token has expired")
-                            access_token = None
-                        else:
-                            remaining = (exp_time - datetime.now(timezone.utc)).total_seconds()
-                            logger.info(f"✅ Tokens loaded from file (expires in {int(remaining)} seconds)")
-                    except Exception as e:
-                        logger.warning(f"Could not parse expiration time: {e}")
-                else:
-                    logger.info("✅ Tokens loaded from file")
+                logger.info("✅ Tokens loaded from file")
         except Exception as e:
             logger.error(f"Error loading tokens: {e}")
 
-def save_tokens(access: str, refresh: str, expires_in: int = None) -> None:
+def save_tokens(access: str, refresh: str) -> None:
     """Save access and refresh tokens to file."""
     global access_token, refresh_token
     
@@ -107,50 +92,23 @@ def save_tokens(access: str, refresh: str, expires_in: int = None) -> None:
     
     TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
     
-    # Calculate expiration time
-    expires_at = None
-    if expires_in:
-        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat()
-    
     with open(TOKEN_FILE, "w") as f:
         json.dump({
             "access_token": access,
             "refresh_token": refresh,
-            "expires_in": expires_in,
-            "expires_at": expires_at,
             "updated_at": datetime.now(timezone.utc).isoformat()
-        }, f, indent=2)
+        }, f)
     
     # Secure the token file
     os.chmod(TOKEN_FILE, 0o600)
-    if expires_in:
-        logger.info(f"✅ Tokens saved securely (expires in {expires_in} seconds)")
-    else:
-        logger.info("✅ Tokens saved securely")
-
-
-
-def save_tokens_from_response(token_data: dict) -> None:
-    """Save tokens from WHOOP API response (includes expiration info)."""
-    access = token_data.get("access_token")
-    refresh = token_data.get("refresh_token", "")
-    expires_in = token_data.get("expires_in", 3600)  # Default to 1 hour if not provided
-    
-    # Log what we receive
-    logger.info(f"save_tokens_from_response called with keys: {list(token_data.keys())}")
-    if not refresh:
-        logger.warning("⚠️  No refresh_token in token_data - check WHOOP API response")
-    else:
-        logger.info(f"Refresh token received: {len(refresh)} characters")
-    
-    save_tokens(access, refresh, expires_in)
+    logger.info("✅ Tokens saved securely")
 
 async def refresh_access_token() -> bool:
     """Refresh the access token using the refresh token."""
     global access_token
     
     if not refresh_token:
-        logger.warning("⚠️  No refresh token available - cannot refresh")
+        logger.warning("No refresh token available")
         return False
     
     try:
@@ -159,18 +117,13 @@ async def refresh_access_token() -> bool:
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
                 "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
-                "scope": "offline"  # Include scope parameter per WHOOP API spec
+                "client_secret": CLIENT_SECRET
             })
             
             if response.status_code == 200:
                 data = response.json()
-                                # WHOOP API rotates refresh tokens - use new one if provided
-                new_refresh = data.get("refresh_token", refresh_token)
-                expires_in = data.get("expires_in", 3600)
-                save_tokens(data["access_token"], new_refresh, expires_in)
-                refresh_token = new_refresh  # Update global refresh token
-                logger.info("✅ Access token refreshed successfully (with token rotation)")
+                save_tokens(data["access_token"], data.get("refresh_token", refresh_token))
+                logger.info("✅ Access token refreshed successfully")
                 return True
             else:
                 logger.error(f"❌ Token refresh failed: {response.status_code}")
@@ -179,40 +132,8 @@ async def refresh_access_token() -> bool:
         logger.error(f"Error refreshing token: {e}")
         return False
 
-
-async def ensure_valid_token() -> bool:
-    """Check token expiration and refresh proactively if needed (within 5 minutes of expiration)."""
-    global access_token
-    
-    if not access_token:
-        return False
-    
-    try:
-        # Check if we have expiration info
-        if TOKEN_FILE.exists():
-            with open(TOKEN_FILE, "r") as f:
-                tokens = json.load(f)
-                expires_at = tokens.get("expires_at")
-                
-                if expires_at:
-                    exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                    now = datetime.now(timezone.utc)
-                    time_until_expiry = (exp_time - now).total_seconds()
-                    
-                    # Refresh if expires within 5 minutes (300 seconds)
-                    if time_until_expiry < 300:
-                        logger.info(f"Token expires in {int(time_until_expiry)} seconds, refreshing proactively...")
-                        return await refresh_access_token()
-    except Exception as e:
-        logger.warning(f"Error checking token expiration: {e}")
-    
-    return True
-
 async def make_whoop_request(endpoint: str, params: Dict = None) -> Any:
     """Make an authenticated request to the Whoop API."""
-    # Check and refresh token proactively if needed
-    await ensure_valid_token()
-    
     if not access_token:
         raise Exception("Not authenticated. Please authenticate first.")
     

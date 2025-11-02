@@ -34,7 +34,7 @@ WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 WHOOP_TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 
 # Required scopes
-SCOPES = "read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement offline"
+SCOPES = "read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement"
 
 
 def generate_authorization_url():

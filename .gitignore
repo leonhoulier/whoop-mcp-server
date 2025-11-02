@@ -57,6 +57,3 @@ yarn-error.log*
 
 # Local configuration
 .local/ 
-# OAuth tokens and storage
-config/tokens.json
-storage/
