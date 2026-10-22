@@ -1,0 +1,6 @@
+{
+  "client_id": "",
+  "client_secret": "",
+  "redirect_uri": "https://fit.leonhoulier.com/api/whoop/callback",
+  "access_keys": {}
+}

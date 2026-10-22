@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!requirements.lock
+!src/
+!src/shared_server.py
+!src/shared_whoop.py
