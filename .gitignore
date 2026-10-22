@@ -56,4 +56,14 @@ yarn-debug.log*
 yarn-error.log*
 
 # Local configuration
-.local/ 
+.local/
+# Credentials and runtime state never belong in Git
+.venv/
+.pytest_cache/
+.data/
+data/
+config/tokens.json
+mcp_config.json
+storage/*.json
+*.enc
+*.key
